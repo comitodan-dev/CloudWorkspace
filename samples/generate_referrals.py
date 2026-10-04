@@ -4,7 +4,7 @@ All practices, patients and clinical details are fictional. Most referrals are
 well-formed; a known fraction deliberately omit the PRIORITY line, the patient
 identifier, or any usable history, and an answer key at the end lists which.
 
-Usage: python3 generate_referrals.py [count] [output.pdf]
+Usage: python3 generate_referrals.py [count] [output.pdf] [--no-key]
 """
 
 import random
@@ -301,7 +301,29 @@ def pick_defect(rng):
     return "no_history"
 
 
-def build(count, out_path):
+def add_answer_key(story, referrals, counts, styles):
+    story.append(PageBreak())
+    story.append(Paragraph("Answer Key", styles["Heading1"]))
+    summary = ", ".join(f"{DEFECT_LABELS[k]}: {v}" for k, v in counts.items())
+    story.append(Paragraph(summary, styles["Normal"]))
+    story.append(Spacer(1, 5 * mm))
+
+    rows = [["#", "Status"]]
+    for r in referrals:
+        rows.append([f"{r['n']:03d}", DEFECT_LABELS[r["defect"]]])
+    key = Table(rows, colWidths=[20 * mm, 150 * mm], repeatRows=1)
+    style = [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+             ("FONTSIZE", (0, 0), (-1, -1), 9),
+             ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.black),
+             ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
+    for i, r in enumerate(referrals, start=1):
+        if r["defect"]:
+            style.append(("TEXTCOLOR", (1, i), (1, i), colors.HexColor("#B03A2E")))
+    key.setStyle(TableStyle(style))
+    story.append(key)
+
+
+def build(count, out_path, answer_key=True):
     rng = random.Random(SEED)
     referrals = [make_referral(i + 1, rng, pick_defect(rng)) for i in range(count)]
 
@@ -318,8 +340,9 @@ def build(count, out_path):
     story = [
         Paragraph("Sample Referral Letters", title),
         Paragraph(f"{count} synthetic referrals for testing. All practices, patients and "
-                  "clinical details are fictional. Roughly a quarter are deliberately "
-                  "incomplete; the answer key at the end lists which and why.",
+                  "clinical details are fictional."
+                  + (" Roughly a quarter are deliberately incomplete; the answer key at "
+                     "the end lists which and why." if answer_key else ""),
                   styles["Normal"]),
         Spacer(1, 10 * mm),
     ]
@@ -342,28 +365,11 @@ def build(count, out_path):
         block.append(Spacer(1, 7 * mm))
         story.append(KeepTogether(block))
 
-    story.append(PageBreak())
-    story.append(Paragraph("Answer Key", styles["Heading1"]))
     counts = {}
     for r in referrals:
         counts[r["defect"]] = counts.get(r["defect"], 0) + 1
-    summary = ", ".join(f"{DEFECT_LABELS[k]}: {v}" for k, v in counts.items())
-    story.append(Paragraph(summary, styles["Normal"]))
-    story.append(Spacer(1, 5 * mm))
-
-    rows = [["#", "Status"]]
-    for r in referrals:
-        rows.append([f"{r['n']:03d}", DEFECT_LABELS[r["defect"]]])
-    key = Table(rows, colWidths=[20 * mm, 150 * mm], repeatRows=1)
-    style = [("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-             ("FONTSIZE", (0, 0), (-1, -1), 9),
-             ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.black),
-             ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
-    for i, r in enumerate(referrals, start=1):
-        if r["defect"]:
-            style.append(("TEXTCOLOR", (1, i), (1, i), colors.HexColor("#B03A2E")))
-    key.setStyle(TableStyle(style))
-    story.append(key)
+    if answer_key:
+        add_answer_key(story, referrals, counts, styles)
 
     def footer(canvas, doc):
         canvas.saveState()
@@ -381,6 +387,7 @@ def build(count, out_path):
 
 
 if __name__ == "__main__":
-    count = int(sys.argv[1]) if len(sys.argv) > 1 else 200
-    out = sys.argv[2] if len(sys.argv) > 2 else "sample_referrals.pdf"
-    print(build(count, out))
+    args = [a for a in sys.argv[1:] if a != "--no-key"]
+    count = int(args[0]) if args else 200
+    out = args[1] if len(args) > 1 else "sample_referrals.pdf"
+    print(build(count, out, answer_key="--no-key" not in sys.argv))
